@@ -1,0 +1,217 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "CamWater API",
+        "description": "API de gestion de la distribution d'eau - CamWater",
+        "contact": {
+            "email": "admin@camwater.cm"
+        },
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8000/api",
+            "description": "Serveur de développement"
+        }
+    ],
+    "paths": {
+        "/auth/register": {
+            "post": {
+                "tags": ["Authentification"],
+                "summary": "Inscription d'un nouvel opérateur",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": ["nom", "email", "mot_de_passe"],
+                                "properties": {
+                                    "nom": {"type": "string", "example": "Jean Dupont"},
+                                    "email": {"type": "string", "example": "jean@camwater.cm"},
+                                    "mot_de_passe": {"type": "string", "example": "password123"},
+                                    "role": {"type": "string", "enum": ["operateur", "admin"], "example": "operateur"}
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {"description": "Opérateur créé avec succès"},
+                    "400": {"description": "Erreur de validation"}
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "tags": ["Authentification"],
+                "summary": "Connexion d'un opérateur",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": ["email", "mot_de_passe"],
+                                "properties": {
+                                    "email": {"type": "string", "example": "admin@camwater.cm"},
+                                    "mot_de_passe": {"type": "string", "example": "password123"}
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {"description": "Connexion réussie"},
+                    "401": {"description": "Identifiants invalides"}
+                }
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "tags": ["Authentification"],
+                "summary": "Obtenir les informations de l'opérateur connecté",
+                "security": [{"bearerAuth": []}],
+                "responses": {
+                    "200": {"description": "Informations de l'opérateur"},
+                    "401": {"description": "Non authentifié"}
+                }
+            }
+        },
+        "/abonnes": {
+            "get": {
+                "tags": ["Abonnés"],
+                "summary": "Liste de tous les abonnés",
+                "security": [{"bearerAuth": []}],
+                "responses": {
+                    "200": {"description": "Liste des abonnés"}
+                }
+            },
+            "post": {
+                "tags": ["Abonnés"],
+                "summary": "Créer un nouvel abonné",
+                "security": [{"bearerAuth": []}],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": ["nom", "prenom", "telephone", "adresse", "numero_compteur", "date_abonnement"],
+                                "properties": {
+                                    "nom": {"type": "string", "example": "Kamga"},
+                                    "prenom": {"type": "string", "example": "Paul"},
+                                    "telephone": {"type": "string", "example": "+237690000001"},
+                                    "adresse": {"type": "string", "example": "Yaoundé, Bastos"},
+                                    "numero_compteur": {"type": "string", "example": "COMP-2024-001"},
+                                    "date_abonnement": {"type": "string", "format": "date", "example": "2024-01-15"}
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {"description": "Abonné créé"},
+                    "400": {"description": "Erreur de validation"}
+                }
+            }
+        },
+        "/consommations": {
+            "get": {
+                "tags": ["Consommations"],
+                "summary": "Liste de toutes les consommations",
+                "security": [{"bearerAuth": []}],
+                "responses": {
+                    "200": {"description": "Liste des consommations"}
+                }
+            },
+            "post": {
+                "tags": ["Consommations"],
+                "summary": "Créer une consommation (génère automatiquement une facture)",
+                "security": [{"bearerAuth": []}],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": ["abonne_id", "index_precedent", "index_actuel", "date_releve", "operateur_id"],
+                                "properties": {
+                                    "abonne_id": {"type": "integer", "example": 1},
+                                    "index_precedent": {"type": "integer", "example": 100},
+                                    "index_actuel": {"type": "integer", "example": 150},
+                                    "date_releve": {"type": "string", "format": "date", "example": "2024-03-09"},
+                                    "operateur_id": {"type": "integer", "example": 1}
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {"description": "Consommation créée et facture générée"},
+                    "400": {"description": "Erreur de validation"}
+                }
+            }
+        },
+        "/factures": {
+            "get": {
+                "tags": ["Factures"],
+                "summary": "Liste de toutes les factures",
+                "security": [{"bearerAuth": []}],
+                "responses": {
+                    "200": {"description": "Liste des factures"}
+                }
+            }
+        },
+        "/paiements": {
+            "get": {
+                "tags": ["Paiements"],
+                "summary": "Liste de tous les paiements",
+                "security": [{"bearerAuth": []}],
+                "responses": {
+                    "200": {"description": "Liste des paiements"}
+                }
+            },
+            "post": {
+                "tags": ["Paiements"],
+                "summary": "Créer un paiement (marque la facture comme payée)",
+                "security": [{"bearerAuth": []}],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "required": ["facture_id", "montant", "date_paiement", "mode_paiement", "operateur_id"],
+                                "properties": {
+                                    "facture_id": {"type": "integer", "example": 1},
+                                    "montant": {"type": "number", "example": 25000},
+                                    "date_paiement": {"type": "string", "format": "date", "example": "2024-03-09"},
+                                    "mode_paiement": {"type": "string", "enum": ["cash", "mobile_money", "virement"], "example": "mobile_money"},
+                                    "operateur_id": {"type": "integer", "example": 1}
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {"description": "Paiement créé et facture marquée payée"},
+                    "400": {"description": "Erreur de validation"}
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "Entrez votre token JWT au format: Bearer {token}"
+            }
+        }
+    },
+    "tags": [
+        {"name": "Authentification", "description": "Endpoints pour l'authentification des opérateurs"},
+        {"name": "Opérateurs", "description": "Gestion des opérateurs"},
+        {"name": "Abonnés", "description": "Gestion des abonnés"},
+        {"name": "Consommations", "description": "Gestion des consommations d'eau"},
+        {"name": "Factures", "description": "Gestion des factures"},
+        {"name": "Paiements", "description": "Gestion des paiements"}
+    ]
+}
