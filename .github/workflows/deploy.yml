@@ -1,0 +1,129 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  deploy:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+    environment: 
+      name: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        tools: composer:v2
+
+    - name: Install dependencies
+      run: composer install --no-ansi --no-interaction --no-progress --prefer-dist --optimize-autoloader --no-dev
+
+    - name: Create deployment package
+      run: |
+        mkdir -p deploy
+        tar -czf deploy/release.tar.gz \
+          --exclude=node_modules \
+          --exclude=tests \
+          --exclude=.git \
+          --exclude=.github \
+          --exclude=storage/logs/*.log \
+          .
+
+    - name: Deploy to server via SSH
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USER }}
+        key: ${{ secrets.DEPLOY_KEY }}
+        port: ${{ secrets.DEPLOY_PORT || 22 }}
+        source: "deploy/release.tar.gz"
+        target: "/tmp/"
+
+    - name: Execute deployment commands
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USER }}
+        key: ${{ secrets.DEPLOY_KEY }}
+        port: ${{ secrets.DEPLOY_PORT || 22 }}
+        script: |
+          cd ${{ secrets.DEPLOY_PATH }}
+          
+          # Backup current version
+          if [ -d "current" ]; then
+            cp -r current backup-$(date +%Y%m%d-%H%M%S)
+          fi
+          
+          # Extract new version
+          mkdir -p releases/$(date +%Y%m%d-%H%M%S)
+          tar -xzf /tmp/deploy/release.tar.gz -C releases/$(date +%Y%m%d-%H%M%S)
+          
+          # Update symlink
+          ln -sfn releases/$(date +%Y%m%d-%H%M%S) current
+          
+          # Run Laravel commands
+          cd current
+          php artisan down
+          php artisan migrate --force
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+          php artisan optimize
+          php artisan l5-swagger:generate
+          php artisan up
+          
+          # Cleanup old releases (keep last 5)
+          cd ../releases
+          ls -t | tail -n +6 | xargs rm -rf
+          
+          echo "✅ Deployment completed successfully!"
+
+    - name: Health check
+      run: |
+        sleep 10
+        curl -f ${{ secrets.APP_URL }}/api/health || exit 1
+
+    - name: Rollback on failure
+      if: failure()
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USER }}
+        key: ${{ secrets.DEPLOY_KEY }}
+        port: ${{ secrets.DEPLOY_PORT || 22 }}
+        script: |
+          cd ${{ secrets.DEPLOY_PATH }}
+          BACKUP=$(ls -t | grep backup | head -n 1)
+          if [ -n "$BACKUP" ]; then
+            ln -sfn $BACKUP current
+            cd current
+            php artisan up
+            echo "⚠️ Rolled back to previous version"
+          fi
+
+    - name: Send deployment notification
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Deployment to ${{ github.event.inputs.environment || 'production' }} successful!"
+        else
+          echo "❌ Deployment failed!"
+        fi

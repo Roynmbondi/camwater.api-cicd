@@ -1,0 +1,110 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        tools: composer:v2
+
+    - name: Install dependencies
+      run: composer install --no-ansi --no-interaction --no-progress --prefer-dist --optimize-autoloader --no-dev
+
+    - name: Build assets
+      run: |
+        npm ci
+        npm run build
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        PREVIOUS_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+        if [ -z "$PREVIOUS_TAG" ]; then
+          CHANGELOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+        else
+          CHANGELOG=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
+        fi
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create release archive
+      run: |
+        mkdir -p release
+        tar -czf release/camwater-api-${{ github.ref_name }}.tar.gz \
+          --exclude=node_modules \
+          --exclude=tests \
+          --exclude=.git \
+          --exclude=.github \
+          --exclude=storage/logs \
+          --exclude=.env \
+          .
+
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        cat > release_notes.md << EOF
+        # CamWater API ${{ github.ref_name }}
+        
+        ## 📦 Installation
+        
+        \`\`\`bash
+        # Télécharger et extraire
+        wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/camwater-api-${{ github.ref_name }}.tar.gz
+        tar -xzf camwater-api-${{ github.ref_name }}.tar.gz
+        
+        # Installer les dépendances
+        composer install --no-dev --optimize-autoloader
+        
+        # Configuration
+        cp .env.example .env
+        php artisan key:generate
+        php artisan jwt:secret
+        php artisan migrate --force
+        \`\`\`
+        
+        ## 📝 Changelog
+        
+        ${{ steps.changelog.outputs.changelog }}
+        
+        ## 🔗 Documentation
+        
+        - [API Documentation](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/README.md)
+        - [Postman Collection](./CamWater_API.postman_collection.json)
+        
+        ---
+        
+        **Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREVIOUS_TAG...${{ github.ref_name }}
+        EOF
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: release_notes.md
+        files: |
+          release/camwater-api-${{ github.ref_name }}.tar.gz
+          CamWater_API.postman_collection.json
+        draft: false
+        prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Notify release
+      run: |
+        echo "✅ Release ${{ github.ref_name }} created successfully!"
+        echo "Download: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
