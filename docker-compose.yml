@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  # Application Laravel
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: camwater-api:latest
+    container_name: camwater-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    ports:
+      - "8000:80"
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - APP_DEBUG=${APP_DEBUG:-false}
+      - APP_KEY=${APP_KEY}
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=${DB_DATABASE:-camwater}
+      - DB_USERNAME=${DB_USERNAME:-root}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - CACHE_DRIVER=redis
+      - SESSION_DRIVER=redis
+      - QUEUE_CONNECTION=redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./storage:/var/www/html/storage
+    networks:
+      - camwater-network
+    depends_on:
+      - db
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Base de données MySQL
+  db:
+    image: mysql:8.0
+    container_name: camwater-db
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+      - MYSQL_DATABASE=${DB_DATABASE:-camwater}
+      - MYSQL_USER=${DB_USERNAME:-camwater}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+    networks:
+      - camwater-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis pour cache et sessions
+  redis:
+    image: redis:7-alpine
+    container_name: camwater-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - camwater-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Nginx (optionnel - si vous voulez un reverse proxy séparé)
+  nginx:
+    image: nginx:alpine
+    container_name: camwater-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./public:/var/www/html/public
+    networks:
+      - camwater-network
+    depends_on:
+      - app
+
+networks:
+  camwater-network:
+    driver: bridge
+
+volumes:
+  db-data:
+    driver: local
+  redis-data:
+    driver: local

@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+tests
+phpunit.xml
+.phpunit.cache
+
+# Node
+node_modules
+npm-debug.log
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea
+.vscode
+.fleet
+.zed
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Laravel
+/storage/*.key
+/storage/logs/*.log
+/vendor
+/public/hot
+/public/storage
+
+# Fichiers de test
+test_*.json
+test_*.sh
+test_*.php
+*.postman_collection.json
+
+# Cache
+bootstrap/cache/*.php
+!bootstrap/cache/.gitignore
+
+# Divers
+*.log
+.phpactor.json
+auth.json

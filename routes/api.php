@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OperateurController;
 use App\Http\Controllers\AbonneController;
@@ -10,6 +11,16 @@ use App\Http\Controllers\PaiementController;
 use App\Http\Controllers\ReclamationController;
 use App\Http\Controllers\StatistiqueController;
 use App\Http\Controllers\LogController;
+
+// Health check endpoint (public)
+Route::get('health', function () {
+    return response()->json([
+        'status' => 'ok',
+        'service' => 'CamWater API',
+        'timestamp' => now()->toIso8601String(),
+        'database' => DB::connection()->getPdo() ? 'connected' : 'disconnected',
+    ]);
+});
 
 // Routes d'authentification (publiques)
 Route::prefix('auth')->group(function () {
