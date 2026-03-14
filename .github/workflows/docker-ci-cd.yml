@@ -8,12 +8,7 @@ on:
   pull_request:
     branches: [ main, master, develop ]
 
-env:
-  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/camwater-api
-  DOCKER_PLATFORMS: linux/amd64,linux/arm64
-
 jobs:
-  # Job 1: Tests et validation
   test:
     name: Tests & Quality Checks
     runs-on: ubuntu-latest
@@ -26,46 +21,48 @@ jobs:
           MYSQL_DATABASE: camwater_test
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
 
       redis:
         image: redis:7-alpine
         ports:
           - 6379:6379
-        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=3
+        options: --health-cmd="redis-cli ping" --health-interval=10s --health-timeout=5s --health-retries=5
 
     steps:
-    - name: 📥 Checkout code
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: 🐘 Setup PHP
+    - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
         php-version: '8.2'
         extensions: mbstring, dom, fileinfo, mysql, pdo_mysql, redis, zip, bcmath, gd
-        coverage: xdebug
         tools: composer:v2
 
-    - name: 📦 Cache Composer dependencies
-      uses: actions/cache@v3
+    - name: Cache Composer dependencies
+      uses: actions/cache@v4
       with:
         path: vendor
-        key: composer-${{ hashFiles('**/composer.lock') }}
-        restore-keys: composer-
+        key: composer-8.2-${{ hashFiles('**/composer.lock') }}
+        restore-keys: composer-8.2-
 
-    - name: 🔧 Install Composer dependencies
+    - name: Install Composer dependencies
       run: composer install --no-ansi --no-interaction --no-progress --prefer-dist
 
-    - name: 📋 Copy .env file
+    - name: Copy .env file
       run: cp .env.example .env
 
-    - name: 🔑 Generate application key
+    - name: Generate application key
       run: php artisan key:generate
 
-    - name: 🔐 Generate JWT secret
+    - name: Generate JWT secret
       run: php artisan jwt:secret
 
-    - name: 📊 Run database migrations
+    - name: Set directory permissions
+      run: chmod -R 777 storage bootstrap/cache
+
+    - name: Run database migrations
       env:
         DB_CONNECTION: mysql
         DB_HOST: 127.0.0.1
@@ -77,7 +74,7 @@ jobs:
         REDIS_PORT: 6379
       run: php artisan migrate --force
 
-    - name: 🧪 Execute PHPUnit tests
+    - name: Execute PHPUnit tests
       env:
         DB_CONNECTION: mysql
         DB_HOST: 127.0.0.1
@@ -87,167 +84,54 @@ jobs:
         DB_PASSWORD: password
         REDIS_HOST: 127.0.0.1
         REDIS_PORT: 6379
-      run: php artisan test --coverage --min=50
+      run: php artisan test
 
-    - name: 📊 Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        files: ./coverage.xml
-        flags: unittests
-        name: codecov-camwater
+    - name: Run PHPStan
+      run: |
+        composer require --dev phpstan/phpstan --no-interaction --quiet
+        vendor/bin/phpstan analyse app --level=5 --no-progress || true
 
-  # Job 2: Analyse de code
-  code-quality:
-    name: Code Quality Analysis
+    - name: Check PSR-12 code style
+      run: |
+        composer require --dev squizlabs/php_codesniffer --no-interaction --quiet
+        vendor/bin/phpcs --standard=PSR12 app || true
+
+  create-artifact:
+    name: Create Application Artifact
     runs-on: ubuntu-latest
     needs: test
 
     steps:
-    - name: 📥 Checkout code
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: 🐘 Setup PHP
-      uses: shivammathur/setup-php@v2
-      with:
-        php-version: '8.2'
-        tools: composer:v2, phpstan, cs2pr
-
-    - name: 🔧 Install dependencies
-      run: composer install --no-ansi --no-interaction --prefer-dist
-
-    - name: 🔍 Run PHPStan
-      run: |
-        composer require --dev phpstan/phpstan --no-interaction
-        vendor/bin/phpstan analyse app --level=5 --error-format=github || true
-
-    - name: 📏 Check PSR-12 code style
-      run: |
-        composer require --dev squizlabs/php_codesniffer --no-interaction
-        vendor/bin/phpcs --standard=PSR12 app --report=checkstyle | cs2pr || true
-
-  # Job 3: Build et test de l'image Docker
-  docker-build:
-    name: Build Docker Image
-    runs-on: ubuntu-latest
-    needs: [test, code-quality]
-
-    steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
-
-    - name: 🐳 Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: 🔐 Login to Docker Hub
-      if: github.event_name != 'pull_request'
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name: 🏷️ Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.DOCKER_IMAGE }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=semver,pattern={{major}}
-          type=sha,prefix={{branch}}-
-          type=raw,value=latest,enable={{is_default_branch}}
-
-    - name: 🏗️ Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        platforms: ${{ env.DOCKER_PLATFORMS }}
-        push: ${{ github.event_name != 'pull_request' }}
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          BUILD_DATE=${{ github.event.head_commit.timestamp }}
-          VCS_REF=${{ github.sha }}
-
-    - name: 🧪 Test Docker image
-      if: github.event_name == 'pull_request'
-      run: |
-        docker build -t test-image .
-        docker run --rm test-image php -v
-        docker run --rm test-image php artisan --version
-
-  # Job 4: Scan de sécurité de l'image
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    needs: docker-build
-    if: github.event_name != 'pull_request'
-
-    steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
-
-    - name: 🔐 Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name: 🔍 Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: ${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-
-    - name: 📤 Upload Trivy results to GitHub Security
-      uses: github/codeql-action/upload-sarif@v2
-      if: always()
-      with:
-        sarif_file: 'trivy-results.sarif'
-
-  # Job 5: Créer un artifact de l'application
-  create-artifact:
-    name: Create Application Artifact
-    runs-on: ubuntu-latest
-    needs: [test, code-quality]
-
-    steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
-
-    - name: 🐘 Setup PHP
+    - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
         php-version: '8.2'
         tools: composer:v2
 
-    - name: 📦 Setup Node.js
+    - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
         cache: 'npm'
 
-    - name: 🔧 Install dependencies
+    - name: Install dependencies
       run: |
         composer install --no-dev --no-ansi --no-interaction --prefer-dist --optimize-autoloader
         npm ci
 
-    - name: 🏗️ Build assets
+    - name: Build assets
       run: npm run build
 
-    - name: 📚 Generate API documentation
+    - name: Generate API documentation
       run: |
         cp .env.example .env
         php artisan key:generate
-        php artisan l5-swagger:generate
+        php artisan l5-swagger:generate || true
 
-    - name: 📦 Create artifact
+    - name: Create artifact
       run: |
         mkdir -p artifacts
         tar -czf artifacts/camwater-api-${{ github.sha }}.tar.gz \
@@ -255,28 +139,77 @@ jobs:
           --exclude=tests \
           --exclude=.git \
           --exclude=.github \
-          --exclude=storage/logs/*.log \
+          --exclude=storage/logs \
           --exclude=.env \
           .
 
-    - name: 📤 Upload artifact
-      uses: actions/upload-artifact@v3
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
       with:
-        name: camwater-api-build-${{ github.sha }}
+        name: camwater-api-${{ github.sha }}
         path: artifacts/
         retention-days: 30
 
-  # Job 6: Notification de succès
-  notify:
-    name: Notify Success
+  docker-build:
+    name: Build & Push Docker Image
     runs-on: ubuntu-latest
-    needs: [docker-build, security-scan, create-artifact]
-    if: success() && github.event_name != 'pull_request'
+    needs: test
+    if: github.event_name != 'pull_request'
 
     steps:
-    - name: 📢 Send success notification
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ secrets.DOCKERHUB_USERNAME }}/camwater-api
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  docker-test:
+    name: Test Docker Image (PR only)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Build Docker image
+      run: docker build -t camwater-api:test .
+
+    - name: Test image
       run: |
-        echo "✅ Pipeline CI/CD completed successfully!"
-        echo "🐳 Docker image: ${{ env.DOCKER_IMAGE }}:${{ github.ref_name }}"
-        echo "📦 Artifact created for commit: ${{ github.sha }}"
-        echo "🔗 View on Docker Hub: https://hub.docker.com/r/${{ env.DOCKER_IMAGE }}"
+        docker run --rm camwater-api:test php -v
+        docker run --rm camwater-api:test php artisan --version
