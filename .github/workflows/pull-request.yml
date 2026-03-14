@@ -5,7 +5,6 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  # ─── Validation du titre (ignoré pour Dependabot) ─────────
   pr-title-check:
     name: Validate PR Title
     runs-on: ubuntu-latest
@@ -29,7 +28,6 @@ jobs:
           revert
         requireScope: false
 
-  # ─── Vérification syntaxe PHP (ignoré pour Dependabot) ────
   syntax-check:
     name: PHP Syntax Check
     runs-on: ubuntu-latest
@@ -65,31 +63,11 @@ jobs:
         composer require --dev squizlabs/php_codesniffer --no-interaction --quiet
         vendor/bin/phpcs --standard=PSR12 app || true
 
-  # ─── Taille de la PR (ignoré pour Dependabot) ─────────────
-  pr-size-check:
-    name: Check PR Size
-    runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    - name: Check size
-      run: |
-        FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
-        echo "Files changed: $FILES"
-        [ "$FILES" -gt 50 ] && echo "⚠️ Warning: more than 50 files changed" || true
-
-  # ─── Commentaire automatique (ignoré pour Dependabot) ─────
   pr-comment:
     name: Add PR Comment
     runs-on: ubuntu-latest
     needs: [syntax-check]
-    # Ce job ne tourne QUE si syntax-check a tourné (pas skipped)
-    if: |
-      always() &&
-      github.actor != 'dependabot[bot]' &&
-      needs.syntax-check.result != 'skipped'
+    if: always() && github.actor != 'dependabot[bot]' && needs.syntax-check.result != 'skipped'
     steps:
     - uses: actions/github-script@v7
       with:
@@ -106,7 +84,6 @@ jobs:
             body: `## 🤖 Automated PR Review\n\n${icon} Code Quality: **${status}**\n\n${msg}`
           });
 
-  # ─── Auto-approve Dependabot (minor + patch seulement) ────
   dependabot-auto-approve:
     name: Auto-approve Dependabot PR
     runs-on: ubuntu-latest
@@ -126,15 +103,6 @@ jobs:
         steps.meta.outputs.update-type == 'version-update:semver-minor' ||
         steps.meta.outputs.update-type == 'version-update:semver-patch'
       run: gh pr review --approve "$PR_URL"
-      env:
-        PR_URL: ${{ github.event.pull_request.html_url }}
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Enable auto-merge for minor/patch
-      if: |
-        steps.meta.outputs.update-type == 'version-update:semver-minor' ||
-        steps.meta.outputs.update-type == 'version-update:semver-patch'
-      run: gh pr merge --auto --squash "$PR_URL"
       env:
         PR_URL: ${{ github.event.pull_request.html_url }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
