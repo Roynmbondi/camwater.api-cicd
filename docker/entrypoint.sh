@@ -3,49 +3,47 @@ set -e
 
 echo "🚀 Starting CamWater API..."
 
-# Attendre que la base de données soit prête
-echo "⏳ Waiting for database..."
-until php artisan db:show 2>/dev/null; do
-    echo "Database is unavailable - sleeping"
+# Attendre que MySQL soit prêt
+echo "⏳ Waiting for database connection..."
+MAX_TRIES=30
+TRIES=0
+until php -r "
+    \$pdo = new PDO(
+        'mysql:host=' . getenv('DB_HOST') . ';port=' . getenv('DB_PORT') . ';dbname=' . getenv('DB_DATABASE'),
+        getenv('DB_USERNAME'),
+        getenv('DB_PASSWORD')
+    );
+    echo 'ok';
+" 2>/dev/null | grep -q "ok"; do
+    TRIES=$((TRIES + 1))
+    if [ $TRIES -ge $MAX_TRIES ]; then
+        echo "❌ Database not available after $MAX_TRIES attempts"
+        exit 1
+    fi
+    echo "Waiting for database... ($TRIES/$MAX_TRIES)"
     sleep 2
 done
 
 echo "✅ Database is ready!"
 
-# Générer la clé d'application si elle n'existe pas
-if [ -z "$APP_KEY" ]; then
+# Générer la clé si absente
+if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then
     echo "🔑 Generating application key..."
     php artisan key:generate --force
 fi
 
-# Générer le secret JWT si nécessaire
-if ! grep -q "JWT_SECRET" .env 2>/dev/null; then
-    echo "🔐 Generating JWT secret..."
-    php artisan jwt:secret --force
-fi
-
-# Exécuter les migrations
-echo "📊 Running database migrations..."
+# Migrations
+echo "📊 Running migrations..."
 php artisan migrate --force
 
-# Optimiser l'application
-echo "⚡ Optimizing application..."
+# Optimisation
+echo "⚡ Optimizing..."
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
-php artisan optimize
 
-# Générer la documentation Swagger
-echo "📚 Generating API documentation..."
-php artisan l5-swagger:generate
+# Storage link
+php artisan storage:link 2>/dev/null || true
 
-# Créer le lien symbolique pour le storage
-if [ ! -L /var/www/html/public/storage ]; then
-    echo "🔗 Creating storage link..."
-    php artisan storage:link
-fi
-
-echo "✨ Application ready!"
-
-# Exécuter la commande passée en argument
+echo "✅ Application ready!"
 exec "$@"

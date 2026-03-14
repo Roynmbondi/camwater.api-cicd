@@ -5,14 +5,13 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
+  # ─── Validation du titre (ignoré pour Dependabot) ─────────
   pr-title-check:
     name: Validate PR Title
     runs-on: ubuntu-latest
-    # Ignorer les PRs Dependabot
     if: github.actor != 'dependabot[bot]'
     steps:
-    - name: Check PR title format
-      uses: amannn/action-semantic-pull-request@v5
+    - uses: amannn/action-semantic-pull-request@v5
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
@@ -30,24 +29,21 @@ jobs:
           revert
         requireScope: false
 
+  # ─── Vérification syntaxe PHP (ignoré pour Dependabot) ────
   syntax-check:
     name: PHP Syntax Check
     runs-on: ubuntu-latest
-    # Ignorer les PRs Dependabot
     if: github.actor != 'dependabot[bot]'
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-    - name: Setup PHP
-      uses: shivammathur/setup-php@v2
+    - uses: shivammathur/setup-php@v2
       with:
         php-version: '8.2'
         tools: composer:v2
 
-    - name: Cache Composer dependencies
-      uses: actions/cache@v4
+    - uses: actions/cache@v4
       with:
         path: vendor
         key: composer-8.2-${{ hashFiles('**/composer.lock') }}
@@ -59,55 +55,58 @@ jobs:
     - name: PHP syntax check
       run: find app routes config -name "*.php" -print0 | xargs -0 -n1 php -l
 
-    - name: Run PHPStan
+    - name: PHPStan
       run: |
         composer require --dev phpstan/phpstan --no-interaction --quiet
         vendor/bin/phpstan analyse app --level=5 --no-progress || true
 
-    - name: Check PSR-12 code style
+    - name: PSR-12 style
       run: |
         composer require --dev squizlabs/php_codesniffer --no-interaction --quiet
         vendor/bin/phpcs --standard=PSR12 app || true
 
+  # ─── Taille de la PR (ignoré pour Dependabot) ─────────────
   pr-size-check:
     name: Check PR Size
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-
-    - name: Check PR size
+    - name: Check size
       run: |
-        CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
-        echo "Files changed: $CHANGED_FILES"
-        if [ "$CHANGED_FILES" -gt 50 ]; then
-          echo "⚠️ Warning: PR modifies more than 50 files"
-        fi
+        FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | wc -l)
+        echo "Files changed: $FILES"
+        [ "$FILES" -gt 50 ] && echo "⚠️ Warning: more than 50 files changed" || true
 
+  # ─── Commentaire automatique (ignoré pour Dependabot) ─────
   pr-comment:
     name: Add PR Comment
     runs-on: ubuntu-latest
     needs: [syntax-check]
-    if: always() && github.actor != 'dependabot[bot]' && needs.syntax-check.result != 'skipped'
+    # Ce job ne tourne QUE si syntax-check a tourné (pas skipped)
+    if: |
+      always() &&
+      github.actor != 'dependabot[bot]' &&
+      needs.syntax-check.result != 'skipped'
     steps:
-    - name: Comment PR
-      uses: actions/github-script@v7
+    - uses: actions/github-script@v7
       with:
         script: |
           const status = '${{ needs.syntax-check.result }}';
           const icon = status === 'success' ? '✅' : '❌';
-          const message = `## 🤖 Automated PR Review\n\n${icon} Code Quality: **${status}**\n\n${status === 'success' ? '✨ All checks passed! Ready for review.' : '⚠️ Some checks failed. Please review the errors above.'}`;
-          github.rest.issues.createComment({
+          const msg = status === 'success'
+            ? '✨ All checks passed! Ready for review.'
+            : '⚠️ Some checks failed. Please review the errors above.';
+          await github.rest.issues.createComment({
             issue_number: context.issue.number,
             owner: context.repo.owner,
             repo: context.repo.repo,
-            body: message
+            body: `## 🤖 Automated PR Review\n\n${icon} Code Quality: **${status}**\n\n${msg}`
           });
 
-  # Job dédié pour auto-approuver les PRs Dependabot sûres
+  # ─── Auto-approve Dependabot (minor + patch seulement) ────
   dependabot-auto-approve:
     name: Auto-approve Dependabot PR
     runs-on: ubuntu-latest
@@ -117,20 +116,24 @@ jobs:
       contents: write
     steps:
     - name: Fetch Dependabot metadata
-      id: metadata
+      id: meta
       uses: dependabot/fetch-metadata@v2
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Auto-approve minor and patch updates
-      if: steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch'
+    - name: Approve minor/patch updates
+      if: |
+        steps.meta.outputs.update-type == 'version-update:semver-minor' ||
+        steps.meta.outputs.update-type == 'version-update:semver-patch'
       run: gh pr review --approve "$PR_URL"
       env:
         PR_URL: ${{ github.event.pull_request.html_url }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Enable auto-merge for minor and patch updates
-      if: steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch'
+    - name: Enable auto-merge for minor/patch
+      if: |
+        steps.meta.outputs.update-type == 'version-update:semver-minor' ||
+        steps.meta.outputs.update-type == 'version-update:semver-patch'
       run: gh pr merge --auto --squash "$PR_URL"
       env:
         PR_URL: ${{ github.event.pull_request.html_url }}
