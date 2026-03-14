@@ -46,7 +46,7 @@ jobs:
         extensions: mbstring, dom, fileinfo, mysql, pdo_mysql, redis, zip, bcmath, gd
         tools: composer:v2
 
-    - uses: actions/cache@v4
+    - uses: actions/cache@v5
       with:
         path: vendor
         key: composer-8.2-${{ hashFiles('**/composer.lock') }}
