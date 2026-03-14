@@ -91,7 +91,7 @@ jobs:
     name: Add PR Comment
     runs-on: ubuntu-latest
     needs: [syntax-check]
-    if: always() && github.actor != 'dependabot[bot]'
+    if: always() && github.actor != 'dependabot[bot]' && needs.syntax-check.result != 'skipped'
     steps:
     - name: Comment PR
       uses: actions/github-script@v7

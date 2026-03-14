@@ -175,11 +175,15 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+    - name: Set Docker image name
+      id: image
+      run: echo "name=${{ secrets.DOCKERHUB_USERNAME }}/camwater-api" >> $GITHUB_OUTPUT
+
     - name: Extract metadata
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ secrets.DOCKERHUB_USERNAME }}/camwater-api
+        images: ${{ steps.image.outputs.name }}
         tags: |
           type=ref,event=branch
           type=semver,pattern={{version}}
