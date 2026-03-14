@@ -3,42 +3,17 @@ updates:
   - package-ecosystem: "composer"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    ignore:
-      # Ignorer les major versions automatiquement
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      interval: "monthly"
+    open-pull-requests-limit: 0
 
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      interval: "monthly"
+    open-pull-requests-limit: 0
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-    commit-message:
-      prefix: "ci"
+    open-pull-requests-limit: 0
