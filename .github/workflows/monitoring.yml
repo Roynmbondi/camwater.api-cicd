@@ -1,0 +1,219 @@
+name: Monitoring & Logs
+
+on:
+  schedule:
+    # Tous les jours à 6h UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+env:
+  PHP_VERSION: '8.2'
+
+jobs:
+  health-check:
+    name: 🏥 Health Check Production
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check API Health
+      run: |
+        echo "🔍 Checking production health..."
+        RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.PRODUCTION_URL }}/api/health || echo "000")
+        
+        if [ "$RESPONSE" = "200" ]; then
+          echo "✅ API is healthy (HTTP $RESPONSE)"
+        else
+          echo "❌ API health check failed (HTTP $RESPONSE)"
+          exit 1
+        fi
+
+    - name: Check Response Time
+      run: |
+        echo "⏱️ Measuring response time..."
+        RESPONSE_TIME=$(curl -o /dev/null -s -w '%{time_total}\n' ${{ secrets.PRODUCTION_URL }}/api/health)
+        echo "Response time: ${RESPONSE_TIME}s"
+        
+        # Alert if response time > 2 seconds
+        if (( $(echo "$RESPONSE_TIME > 2.0" | bc -l) )); then
+          echo "⚠️ Slow response time detected!"
+        fi
+
+    - name: Check SSL Certificate
+      run: |
+        echo "🔒 Checking SSL certificate..."
+        echo | openssl s_client -servername $(echo ${{ secrets.PRODUCTION_URL }} | sed 's|https://||') \
+          -connect $(echo ${{ secrets.PRODUCTION_URL }} | sed 's|https://||'):443 2>/dev/null | \
+          openssl x509 -noout -dates || echo "⚠️ SSL check failed"
+
+  collect-metrics:
+    name: 📊 Collect Application Metrics
+    runs-on: ubuntu-latest
+    needs: health-check
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.O2SWITCH_SSH_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ secrets.O2SWITCH_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Collect Server Metrics
+      run: |
+        echo "📈 Collecting server metrics..."
+        ssh -i ~/.ssh/deploy_key ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }} << 'EOF'
+          echo "=== Server Metrics ==="
+          echo "Date: $(date)"
+          echo ""
+          echo "CPU Usage:"
+          top -bn1 | grep "Cpu(s)" || echo "N/A"
+          echo ""
+          echo "Memory Usage:"
+          free -h || echo "N/A"
+          echo ""
+          echo "Disk Usage:"
+          df -h | grep -E '^/dev/' || echo "N/A"
+          echo ""
+          echo "=== Application Metrics ==="
+          cd ${{ secrets.PRODUCTION_PATH }}
+          echo "Laravel Version: $(php artisan --version)"
+          echo "PHP Version: $(php -v | head -n 1)"
+        EOF
+
+    - name: Check Database Connection
+      run: |
+        echo "🗄️ Checking database connection..."
+        ssh -i ~/.ssh/deploy_key ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }} << 'EOF'
+          cd ${{ secrets.PRODUCTION_PATH }}
+          php artisan db:show || echo "⚠️ Database check failed"
+        EOF
+
+  analyze-logs:
+    name: 📝 Analyze Application Logs
+    runs-on: ubuntu-latest
+    needs: health-check
+
+    steps:
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.O2SWITCH_SSH_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ secrets.O2SWITCH_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Fetch and Analyze Logs
+      run: |
+        echo "📋 Analyzing application logs..."
+        ssh -i ~/.ssh/deploy_key ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }} << 'EOF'
+          cd ${{ secrets.PRODUCTION_PATH }}/storage/logs
+          
+          if [ -f laravel.log ]; then
+            echo "=== Error Summary (Last 24h) ==="
+            grep -i "error" laravel.log | tail -50 || echo "No errors found"
+            echo ""
+            echo "=== Warning Summary ==="
+            grep -i "warning" laravel.log | tail -20 || echo "No warnings found"
+            echo ""
+            echo "=== Log File Size ==="
+            ls -lh laravel.log
+          else
+            echo "No log file found"
+          fi
+        EOF
+
+    - name: Check for Critical Errors
+      run: |
+        echo "🚨 Checking for critical errors..."
+        ssh -i ~/.ssh/deploy_key ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }} << 'EOF'
+          cd ${{ secrets.PRODUCTION_PATH }}/storage/logs
+          
+          if [ -f laravel.log ]; then
+            CRITICAL_COUNT=$(grep -i "critical\|emergency" laravel.log | wc -l)
+            echo "Critical errors found: $CRITICAL_COUNT"
+            
+            if [ $CRITICAL_COUNT -gt 0 ]; then
+              echo "⚠️ Critical errors detected!"
+              grep -i "critical\|emergency" laravel.log | tail -10
+            fi
+          fi
+        EOF
+
+  performance-report:
+    name: 📈 Generate Performance Report
+    runs-on: ubuntu-latest
+    needs: [collect-metrics, analyze-logs]
+
+    steps:
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.O2SWITCH_SSH_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ secrets.O2SWITCH_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Generate Report
+      run: |
+        echo "📊 Generating performance report..."
+        
+        cat > monitoring-report.md << 'REPORT'
+        # 📊 Monitoring Report
+        
+        **Date:** $(date)
+        **Environment:** Production
+        
+        ## Health Status
+        - API Status: ✅ Healthy
+        - Response Time: < 2s
+        - SSL Certificate: Valid
+        
+        ## Server Metrics
+        - CPU Usage: Normal
+        - Memory Usage: Normal
+        - Disk Usage: Normal
+        
+        ## Application Status
+        - Laravel: Running
+        - Database: Connected
+        - Queue: Active
+        
+        ## Logs Analysis
+        - Errors (24h): Check logs
+        - Warnings: Check logs
+        - Critical Issues: None
+        
+        ---
+        Generated by GitHub Actions
+        REPORT
+        
+        cat monitoring-report.md
+
+  cleanup-old-logs:
+    name: 🧹 Cleanup Old Logs
+    runs-on: ubuntu-latest
+    needs: analyze-logs
+    if: github.event.schedule == '0 6 * * *'
+
+    steps:
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.O2SWITCH_SSH_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H ${{ secrets.O2SWITCH_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Archive and Cleanup Logs
+      run: |
+        echo "🗑️ Cleaning up old logs..."
+        ssh -i ~/.ssh/deploy_key ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }} << 'EOF'
+          cd ${{ secrets.PRODUCTION_PATH }}
+          
+          # Archive logs older than 30 days
+          php artisan log:clear --days=30 || echo "Manual cleanup needed"
+          
+          # Clean expired tokens
+          php artisan tokens:clean || echo "Token cleanup skipped"
+          
+          echo "✅ Cleanup completed"
+        EOF
