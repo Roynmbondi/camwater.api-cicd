@@ -271,7 +271,7 @@ jobs:
   # ============================================
   
   deploy-staging:
-    name: 🚀 Deploy to Staging (O2Switch)
+    name: 🚀 Deploy to Staging (O2Switch via FTP)
     runs-on: ubuntu-latest
     needs: [build, performance-metrics]
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
@@ -287,33 +287,36 @@ jobs:
         name: camwater-api-build
         path: artifacts/
 
-    - name: Setup SSH
+    - name: Extract artifact
       run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.O2SWITCH_SSH_KEY }}" > ~/.ssh/deploy_key
-        chmod 600 ~/.ssh/deploy_key
-        ssh-keyscan -H ${{ secrets.O2SWITCH_HOST }} >> ~/.ssh/known_hosts
+        cd artifacts
+        tar -xzf camwater-api-${{ github.sha }}.tar.gz -C ../deploy
+        cd ..
 
-    - name: Deploy to Staging
+    - name: Deploy via FTP
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      with:
+        server: ${{ secrets.FTP_SERVER }}
+        username: ${{ secrets.FTP_USERNAME }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        local-dir: ./deploy/
+        server-dir: ${{ secrets.STAGING_PATH }}/
+        exclude: |
+          **/.git*
+          **/.git*/**
+          **/node_modules/**
+          **/tests/**
+          **/.env
+
+    - name: Run post-deployment commands via FTP
       run: |
-        echo "🚀 Deploying to staging environment..."
-        scp -i ~/.ssh/deploy_key artifacts/camwater-api-${{ github.sha }}.tar.gz \
-          ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }}:${{ secrets.STAGING_PATH }}/
-
-        ssh -i ~/.ssh/deploy_key ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }} << 'EOF'
-          cd ${{ secrets.STAGING_PATH }}
-          tar -xzf camwater-api-${{ github.sha }}.tar.gz
-          cp .env.staging .env
-          php artisan down --message="Deployment in progress"
-          php artisan migrate --force
-          php artisan config:cache
-          php artisan route:cache
-          php artisan view:cache
-          php artisan optimize
-          chmod -R 755 storage bootstrap/cache
-          php artisan up
-          echo "✅ Staging deployment completed"
-        EOF
+        echo "✅ Files uploaded to staging"
+        echo "⚠️ Note: Run these commands manually in cPanel Terminal:"
+        echo "cd ${{ secrets.STAGING_PATH }}"
+        echo "php artisan migrate --force"
+        echo "php artisan config:cache"
+        echo "php artisan route:cache"
+        echo "php artisan optimize"
 
     - name: Health Check
       run: |
@@ -321,7 +324,7 @@ jobs:
         curl -f ${{ secrets.STAGING_URL }}/api/health || echo "⚠️ Health check failed"
 
   deploy-production:
-    name: 🎯 Deploy to Production (O2Switch)
+    name: 🎯 Deploy to Production (O2Switch via FTP)
     runs-on: ubuntu-latest
     needs: [build, performance-metrics]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -337,43 +340,37 @@ jobs:
         name: camwater-api-build
         path: artifacts/
 
-    - name: Setup SSH
+    - name: Extract artifact
       run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.O2SWITCH_SSH_KEY }}" > ~/.ssh/deploy_key
-        chmod 600 ~/.ssh/deploy_key
-        ssh-keyscan -H ${{ secrets.O2SWITCH_HOST }} >> ~/.ssh/known_hosts
+        mkdir -p deploy
+        cd artifacts
+        tar -xzf camwater-api-${{ github.sha }}.tar.gz -C ../deploy
+        cd ..
 
-    - name: Create Backup
+    - name: Deploy via FTP
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      with:
+        server: ${{ secrets.FTP_SERVER }}
+        username: ${{ secrets.FTP_USERNAME }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        local-dir: ./deploy/
+        server-dir: ${{ secrets.PRODUCTION_PATH }}/
+        exclude: |
+          **/.git*
+          **/.git*/**
+          **/node_modules/**
+          **/tests/**
+          **/.env
+
+    - name: Run post-deployment commands via FTP
       run: |
-        echo "💾 Creating backup..."
-        ssh -i ~/.ssh/deploy_key ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }} << 'EOF'
-          cd ${{ secrets.PRODUCTION_PATH }}
-          tar -czf ../backups/backup-$(date +%Y%m%d-%H%M%S).tar.gz .
-          echo "✅ Backup created"
-        EOF
-
-    - name: Deploy to Production
-      run: |
-        echo "🚀 Deploying to production environment..."
-        scp -i ~/.ssh/deploy_key artifacts/camwater-api-${{ github.sha }}.tar.gz \
-          ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }}:${{ secrets.PRODUCTION_PATH }}/
-
-        ssh -i ~/.ssh/deploy_key ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }} << 'EOF'
-          cd ${{ secrets.PRODUCTION_PATH }}
-          tar -xzf camwater-api-${{ github.sha }}.tar.gz
-          cp .env.production .env
-          php artisan down --message="Deployment in progress"
-          php artisan migrate --force
-          php artisan config:cache
-          php artisan route:cache
-          php artisan view:cache
-          php artisan optimize
-          chmod -R 755 storage bootstrap/cache
-          php artisan queue:restart
-          php artisan up
-          echo "✅ Production deployment completed"
-        EOF
+        echo "✅ Files uploaded to production"
+        echo "⚠️ Note: Run these commands manually in cPanel Terminal:"
+        echo "cd ${{ secrets.PRODUCTION_PATH }}"
+        echo "php artisan migrate --force"
+        echo "php artisan config:cache"
+        echo "php artisan route:cache"
+        echo "php artisan optimize"
 
     - name: Health Check
       run: |
@@ -385,15 +382,3 @@ jobs:
       run: |
         echo "✅ Deployment to production successful!"
         echo "🌐 URL: ${{ secrets.PRODUCTION_URL }}"
-
-    - name: Rollback on Failure
-      if: failure()
-      run: |
-        echo "❌ Deployment failed, initiating rollback..."
-        ssh -i ~/.ssh/deploy_key ${{ secrets.O2SWITCH_USER }}@${{ secrets.O2SWITCH_HOST }} << 'EOF'
-          cd ${{ secrets.PRODUCTION_PATH }}
-          LATEST_BACKUP=$(ls -t ../backups/backup-*.tar.gz | head -1)
-          tar -xzf $LATEST_BACKUP
-          php artisan up
-          echo "🔄 Rollback completed"
-        EOF
