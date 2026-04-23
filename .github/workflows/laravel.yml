@@ -79,20 +79,10 @@ jobs:
 
     - name: Setup environment
       run: |
-        cp .env.example .env
+        cp .env.testing .env
         php artisan key:generate
         echo "yes" | php artisan jwt:secret
-        
-        # Configure SQLite for tests
-        touch database/database.sqlite
-        echo "DB_CONNECTION=sqlite" >> .env
-        echo "DB_DATABASE=database/database.sqlite" >> .env
         chmod -R 777 storage bootstrap/cache
-        
-        # Configure SQLite for tests
-        touch database/database.sqlite
-        echo "DB_CONNECTION=sqlite" >> .env
-        echo "DB_DATABASE=database/database.sqlite" >> .env
 
     - name: Run Unit Tests
       run: php artisan test --testsuite=Unit || true
