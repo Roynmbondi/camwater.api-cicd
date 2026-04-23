@@ -29,9 +29,9 @@ jobs:
 
     - name: Setup environment
       run: |
-        cp .env.example .env
+        cp .env.testing .env
         php artisan key:generate
-        php artisan jwt:secret
+        echo "yes" | php artisan jwt:secret
         chmod -R 777 storage bootstrap/cache
 
     - name: Start Laravel server
@@ -80,9 +80,9 @@ jobs:
 
     - name: Setup environment
       run: |
-        cp .env.example .env
+        cp .env.testing .env
         php artisan key:generate
-        php artisan jwt:secret
+        echo "yes" | php artisan jwt:secret
         php artisan migrate --force
 
     - name: Test Query Performance
@@ -119,9 +119,9 @@ jobs:
 
     - name: Setup environment
       run: |
-        cp .env.example .env
+        cp .env.testing .env
         php artisan key:generate
-        php artisan jwt:secret
+        echo "yes" | php artisan jwt:secret
 
     - name: Check Memory Usage
       run: |

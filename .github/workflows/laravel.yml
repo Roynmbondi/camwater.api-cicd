@@ -184,8 +184,9 @@ jobs:
 
     - name: Generate API Documentation
       run: |
-        cp .env.example .env
+        cp .env.testing .env
         php artisan key:generate
+        echo "yes" | php artisan jwt:secret
         php artisan l5-swagger:generate || true
 
     - name: Optimize Laravel
@@ -236,9 +237,9 @@ jobs:
 
     - name: Setup environment
       run: |
-        cp .env.example .env
+        cp .env.testing .env
         php artisan key:generate
-        php artisan jwt:secret
+        echo "yes" | php artisan jwt:secret
 
     - name: Measure application boot time
       run: |
