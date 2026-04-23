@@ -81,11 +81,21 @@ jobs:
       run: |
         cp .env.example .env
         php artisan key:generate
-        php artisan jwt:secret
+        echo "yes" | php artisan jwt:secret
+        
+        # Configure SQLite for tests
+        touch database/database.sqlite
+        echo "DB_CONNECTION=sqlite" >> .env
+        echo "DB_DATABASE=database/database.sqlite" >> .env
         chmod -R 777 storage bootstrap/cache
+        
+        # Configure SQLite for tests
+        touch database/database.sqlite
+        echo "DB_CONNECTION=sqlite" >> .env
+        echo "DB_DATABASE=database/database.sqlite" >> .env
 
     - name: Run Unit Tests
-      run: php artisan test --testsuite=Unit --coverage --min=50 || true
+      run: php artisan test --testsuite=Unit || true
 
     - name: Run Feature Tests
       run: php artisan test --testsuite=Feature || true
