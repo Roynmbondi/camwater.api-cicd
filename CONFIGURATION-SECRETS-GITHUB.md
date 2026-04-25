@@ -5,6 +5,7 @@
 ### Serveur FTP O2Switch
 - **Serveur FTP**: `ftp.cdiu8226.odns.fr`
 - **Port**: `21`
+- **Protocole**: `FTPS` (FTP over TLS/SSL)
 - **Nom d'utilisateur**: `deploy@cdwfs.net`
 - **Mot de passe**: [À définir - ne pas mettre ici]
 - **Path utilisateur FTP**: `/home/cdiu8226/`
@@ -194,11 +195,24 @@ LOG_LEVEL=error
 ### Erreur : "Input required and not supplied: server"
 - ✅ **Solution** : Vérifier que tous les secrets sont bien créés dans GitHub
 
-### Erreur : "FTP connection failed"
-- Vérifier que le serveur FTP est correct : `ftp.cdiu8226.odns.fr`
-- Vérifier que le port est `21`
-- Vérifier le nom d'utilisateur : `deploy@cdwfs.net`
-- Vérifier le mot de passe FTP
+### Erreur : "FTP connection failed" ou "Login authentication failed"
+
+**Causes possibles :**
+1. Le mot de passe FTP est incorrect
+2. Le nom d'utilisateur est incorrect
+3. Le serveur nécessite FTPS (configuré maintenant)
+
+**Solutions :**
+1. Vérifier le mot de passe dans cPanel → Comptes FTP
+2. Vérifier que le nom d'utilisateur est bien : `deploy@cdwfs.net`
+3. Vérifier que le serveur FTP est : `ftp.cdiu8226.odns.fr`
+4. Si l'erreur persiste, essayer de se connecter manuellement avec FileZilla :
+   - Hôte : `ftp.cdiu8226.odns.fr`
+   - Utilisateur : `deploy@cdwfs.net`
+   - Mot de passe : [ton mot de passe]
+   - Port : 21
+   - Protocole : FTP - Explicit TLS/SSL (FTPS)
+5. Si FileZilla fonctionne, copier exactement les mêmes informations dans les secrets GitHub
 
 ### Erreur : "Directory not found"
 - Vérifier que le chemin `STAGING_PATH` est correct : `public_html/mbondi/api`
