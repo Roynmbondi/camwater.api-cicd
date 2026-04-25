@@ -21,33 +21,33 @@ Route::middleware('web')->group(function () {
     // Abonnés
     Route::get('/abonnes', function () {
         return view('abonnes.index');
-    })->name('abonnes.index');
+    })->name('web.abonnes.index');
     
     Route::get('/abonnes/create', function () {
         return view('abonnes.create');
-    })->name('abonnes.create');
+    })->name('web.abonnes.create');
     
     Route::get('/abonnes/{id}', function ($id) {
         return view('abonnes.show', ['id' => $id]);
-    })->name('abonnes.show');
+    })->name('web.abonnes.show');
     
     Route::get('/abonnes/{id}/edit', function ($id) {
         return view('abonnes.edit', ['id' => $id]);
-    })->name('abonnes.edit');
+    })->name('web.abonnes.edit');
     
     // Factures
     Route::get('/factures', function () {
         return view('factures.index');
-    })->name('factures.index');
+    })->name('web.factures.index');
     
     // Réclamations
     Route::get('/reclamations', function () {
         return view('reclamations.index');
-    })->name('reclamations.index');
+    })->name('web.reclamations.index');
     
     // Statistiques
     Route::get('/statistiques', function () {
         return view('statistiques');
-    })->name('statistiques');
+    })->name('web.statistiques');
 });
 
