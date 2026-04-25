@@ -278,7 +278,6 @@ jobs:
     if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     environment:
       name: staging
-      url: ${{ secrets.STAGING_URL }}
 
     steps:
     - uses: actions/checkout@v4
@@ -331,7 +330,6 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: production
-      url: ${{ secrets.PRODUCTION_URL }}
 
     steps:
     - uses: actions/checkout@v4
