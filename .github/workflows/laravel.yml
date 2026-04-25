@@ -271,7 +271,7 @@ jobs:
   # PARTIE 3: DEPLOYMENT - O2Switch
   # ============================================
   
-  deploy-staging:
+  deploy:
     name: 🚀 Deploy to Staging (O2Switch via FTP)
     runs-on: ubuntu-latest
     needs: [build, performance-metrics]
@@ -303,11 +303,12 @@ jobs:
         protocol: ftps
         port: 21
         local-dir: ./deploy/
-        server-dir: ${{ secrets.STAGING_PATH }}/
+        server-dir: /public_html/mbondi/api/
         exclude: |
           **/.git*
           **/.git*/**
           **/node_modules/**
+          **/vendor/**
           **/tests/**
           **/.env
 
@@ -326,63 +327,4 @@ jobs:
         sleep 10
         curl -f ${{ secrets.STAGING_URL }}/api/health || echo "⚠️ Health check failed"
 
-  deploy-production:
-    name: 🎯 Deploy to Production (O2Switch via FTP)
-    runs-on: ubuntu-latest
-    needs: [build, performance-metrics]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment:
-      name: production
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - uses: actions/download-artifact@v4
-      with:
-        name: camwater-api-build
-        path: artifacts/
-
-    - name: Extract artifact
-      run: |
-        mkdir -p deploy
-        cd artifacts
-        tar -xzf camwater-api-${{ github.sha }}.tar.gz -C ../deploy
-        cd ..
-
-    - name: Deploy via FTP
-      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-      with:
-        server: ${{ secrets.FTP_SERVER }}
-        username: ${{ secrets.FTP_USERNAME }}
-        password: ${{ secrets.FTP_PASSWORD }}
-        protocol: ftps
-        port: 21
-        local-dir: ./deploy/
-        server-dir: ${{ secrets.PRODUCTION_PATH }}/
-        exclude: |
-          **/.git*
-          **/.git*/**
-          **/node_modules/**
-          **/tests/**
-          **/.env
-
-    - name: Run post-deployment commands via FTP
-      run: |
-        echo "✅ Files uploaded to production"
-        echo "⚠️ Note: Run these commands manually in cPanel Terminal:"
-        echo "cd ${{ secrets.PRODUCTION_PATH }}"
-        echo "php artisan migrate --force"
-        echo "php artisan config:cache"
-        echo "php artisan route:cache"
-        echo "php artisan optimize"
-
-    - name: Health Check
-      run: |
-        sleep 15
-        curl -f ${{ secrets.PRODUCTION_URL }}/api/health || echo "⚠️ Health check failed"
-
-    - name: Notify Success
-      if: success()
-      run: |
-        echo "✅ Deployment to production successful!"
-        echo "🌐 URL: ${{ secrets.PRODUCTION_URL }}"
+  
