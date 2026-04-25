@@ -291,6 +291,7 @@ jobs:
       run: |
         mkdir -p deploy
         tar -xzf artifacts/camwater-api-${{ github.sha }}.tar.gz -C deploy/
+        rm -rf deploy/artifacts/
         ls -la deploy/
 
     - name: Deploy via FTP
@@ -311,6 +312,7 @@ jobs:
           **/tests/**
           **/.env
           **/storage/logs/**
+          **/artifacts/**
 
     - name: Health Check
       run: |
