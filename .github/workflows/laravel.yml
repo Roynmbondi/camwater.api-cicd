@@ -290,9 +290,8 @@ jobs:
     - name: Extract artifact
       run: |
         mkdir -p deploy
-        cd artifacts
-        tar -xzf camwater-api-${{ github.sha }}.tar.gz -C ../deploy
-        cd ..
+        tar -xzf artifacts/camwater-api-${{ github.sha }}.tar.gz -C deploy/
+        ls -la deploy/
 
     - name: Deploy via FTP
       uses: SamKirkland/FTP-Deploy-Action@v4.3.4
@@ -311,20 +310,11 @@ jobs:
           **/vendor/**
           **/tests/**
           **/.env
-
-    - name: Run post-deployment commands via FTP
-      run: |
-        echo "✅ Files uploaded to staging"
-        echo "⚠️ Note: Run these commands manually in cPanel Terminal:"
-        echo "cd ${{ secrets.STAGING_PATH }}"
-        echo "php artisan migrate --force"
-        echo "php artisan config:cache"
-        echo "php artisan route:cache"
-        echo "php artisan optimize"
+          **/storage/logs/**
 
     - name: Health Check
       run: |
-        sleep 10
+        sleep 15
         curl -f ${{ secrets.STAGING_URL }}/api/health || echo "⚠️ Health check failed"
 
   
