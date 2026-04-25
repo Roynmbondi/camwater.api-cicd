@@ -3,22 +3,64 @@
 @section('title', 'Gestion des Abonnés - CamWater')
 
 @section('content')
-<div x-data="abonnesData()" x-init="loadAbonnes()">
+<div x-data="abonnesData()" x-init="loadAbonnes()" class="fade-in">
     <!-- Header -->
     <div class="flex justify-between items-center mb-8">
         <div>
             <h1 class="text-3xl font-bold text-gray-800">
-                <i class="fas fa-users mr-3"></i>Gestion des Abonnés
+                <i class="fas fa-users mr-3 text-blue-600"></i>Gestion des Abonnés
             </h1>
-            <p class="text-gray-600 mt-2">Liste de tous les abonnés</p>
+            <p class="text-gray-600 mt-2">Gérez tous vos abonnés en un seul endroit</p>
         </div>
-        <a href="{{ route('abonnes.create') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition flex items-center">
+        <a href="{{ route('web.abonnes.create') }}" class="btn-primary">
             <i class="fas fa-plus mr-2"></i>Nouvel abonné
         </a>
     </div>
 
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="stats-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-600 text-sm font-medium">Total Abonnés</p>
+                    <p class="text-2xl font-bold text-gray-800" x-text="pagination.total || 0"></p>
+                </div>
+                <div class="bg-blue-100 p-3 rounded-full">
+                    <i class="fas fa-users text-blue-600 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats-card" style="border-left-color: #10b981;">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-600 text-sm font-medium">Particuliers</p>
+                    <p class="text-2xl font-bold text-gray-800" x-text="stats.particuliers || 0"></p>
+                </div>
+                <div class="bg-green-100 p-3 rounded-full">
+                    <i class="fas fa-user text-green-600 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats-card" style="border-left-color: #f59e0b;">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-600 text-sm font-medium">Professionnels</p>
+                    <p class="text-2xl font-bold text-gray-800" x-text="stats.professionnels || 0"></p>
+                </div>
+                <div class="bg-yellow-100 p-3 rounded-full">
+                    <i class="fas fa-building text-yellow-600 text-xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Filters -->
-    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div class="card p-6 mb-6">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">
+            <i class="fas fa-filter mr-2"></i>Filtres de recherche
+        </h3>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
                 <label class="block text-gray-700 font-semibold mb-2">Recherche</label>
@@ -27,7 +69,7 @@
                     x-model="search"
                     @input.debounce="loadAbonnes()"
                     placeholder="Nom, email, téléphone..."
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    class="form-input"
                 >
             </div>
             <div>
@@ -35,9 +77,9 @@
                 <select 
                     x-model="filters.type"
                     @change="loadAbonnes()"
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    class="form-input"
                 >
-                    <option value="">Tous</option>
+                    <option value="">Tous les types</option>
                     <option value="particulier">Particulier</option>
                     <option value="professionnel">Professionnel</option>
                 </select>
@@ -48,14 +90,14 @@
                     type="text" 
                     x-model="filters.ville"
                     @input.debounce="loadAbonnes()"
-                    placeholder="Ville..."
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Filtrer par ville..."
+                    class="form-input"
                 >
             </div>
             <div class="flex items-end">
                 <button 
                     @click="resetFilters()"
-                    class="w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition"
+                    class="btn-secondary w-full"
                 >
                     <i class="fas fa-redo mr-2"></i>Réinitialiser
                 </button>
@@ -64,70 +106,88 @@
     </div>
 
     <!-- Table -->
-    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+    <div class="table-container">
         <div class="overflow-x-auto">
-            <table class="w-full">
-                <thead class="bg-gray-50 border-b">
+            <table class="table w-full">
+                <thead>
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Téléphone</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ville</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        <th><i class="fas fa-user mr-2"></i>Abonné</th>
+                        <th><i class="fas fa-envelope mr-2"></i>Contact</th>
+                        <th><i class="fas fa-tag mr-2"></i>Type</th>
+                        <th><i class="fas fa-map-marker-alt mr-2"></i>Localisation</th>
+                        <th><i class="fas fa-cogs mr-2"></i>Actions</th>
                     </tr>
                 </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                <tbody>
                     <template x-if="loading">
                         <tr>
-                            <td colspan="6" class="px-6 py-4 text-center">
-                                <i class="fas fa-spinner fa-spin text-2xl text-blue-600"></i>
-                                <p class="text-gray-600 mt-2">Chargement...</p>
+                            <td colspan="5" class="text-center py-12">
+                                <div class="flex flex-col items-center">
+                                    <i class="fas fa-spinner fa-spin text-3xl text-blue-600 mb-4"></i>
+                                    <p class="text-gray-600">Chargement des abonnés...</p>
+                                </div>
                             </td>
                         </tr>
                     </template>
                     
                     <template x-if="!loading && abonnes.length === 0">
                         <tr>
-                            <td colspan="6" class="px-6 py-4 text-center text-gray-500">
-                                <i class="fas fa-inbox text-4xl mb-2"></i>
-                                <p>Aucun abonné trouvé</p>
+                            <td colspan="5" class="text-center py-12">
+                                <div class="flex flex-col items-center">
+                                    <i class="fas fa-inbox text-5xl text-gray-400 mb-4"></i>
+                                    <p class="text-gray-600 text-lg">Aucun abonné trouvé</p>
+                                    <p class="text-gray-500 text-sm">Essayez de modifier vos critères de recherche</p>
+                                </div>
                             </td>
                         </tr>
                     </template>
                     
                     <template x-for="abonne in abonnes" :key="abonne.id">
-                        <tr class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap">
+                        <tr>
+                            <td>
                                 <div class="flex items-center">
-                                    <div class="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                        <i class="fas fa-user text-blue-600"></i>
+                                    <div class="flex-shrink-0 h-12 w-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                                        <span x-text="abonne.nom ? abonne.nom.charAt(0).toUpperCase() : 'A'"></span>
                                     </div>
                                     <div class="ml-4">
-                                        <div class="text-sm font-medium text-gray-900" x-text="abonne.nom"></div>
+                                        <div class="text-sm font-semibold text-gray-900" x-text="abonne.nom + ' ' + (abonne.prenom || '')"></div>
+                                        <div class="text-sm text-gray-500" x-text="'#' + abonne.numero_compteur"></div>
                                     </div>
                                 </div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="abonne.email"></td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="abonne.telephone"></td>
-                            <td class="px-6 py-4 whitespace-nowrap">
+                            <td>
+                                <div class="text-sm text-gray-900" x-text="abonne.email"></div>
+                                <div class="text-sm text-gray-500" x-text="abonne.telephone"></div>
+                            </td>
+                            <td>
                                 <span 
-                                    class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                                    :class="abonne.type === 'particulier' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'"
-                                    x-text="abonne.type"
+                                    class="badge"
+                                    :class="abonne.type === 'particulier' ? 'badge-success' : 'badge-info'"
+                                    x-text="abonne.type === 'particulier' ? 'Particulier' : 'Professionnel'"
                                 ></span>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="abonne.ville || '-'"></td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                <a :href="`/abonnes/${abonne.id}`" class="text-blue-600 hover:text-blue-900">
-                                    <i class="fas fa-eye"></i>
-                                </a>
-                                <a :href="`/abonnes/${abonne.id}/edit`" class="text-yellow-600 hover:text-yellow-900">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                                <button @click="deleteAbonne(abonne.id)" class="text-red-600 hover:text-red-900">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                            <td>
+                                <div class="text-sm text-gray-900" x-text="abonne.ville || 'Non spécifiée'"></div>
+                                <div class="text-sm text-gray-500" x-text="abonne.adresse || ''"></div>
+                            </td>
+                            <td>
+                                <div class="flex space-x-2">
+                                    <a :href="`/abonnes/${abonne.id}`" 
+                                       class="text-blue-600 hover:text-blue-800 p-2 rounded-full hover:bg-blue-100 transition"
+                                       title="Voir les détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a :href="`/abonnes/${abonne.id}/edit`" 
+                                       class="text-yellow-600 hover:text-yellow-800 p-2 rounded-full hover:bg-yellow-100 transition"
+                                       title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button @click="deleteAbonne(abonne.id)" 
+                                            class="text-red-600 hover:text-red-800 p-2 rounded-full hover:bg-red-100 transition"
+                                            title="Supprimer">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     </template>
@@ -138,9 +198,9 @@
         <!-- Pagination -->
         <div class="bg-gray-50 px-6 py-4 flex items-center justify-between border-t">
             <div class="text-sm text-gray-700">
-                Affichage de <span class="font-medium" x-text="pagination.from"></span> à 
-                <span class="font-medium" x-text="pagination.to"></span> sur 
-                <span class="font-medium" x-text="pagination.total"></span> résultats
+                Affichage de <span class="font-medium" x-text="pagination.from || 0"></span> à 
+                <span class="font-medium" x-text="pagination.to || 0"></span> sur 
+                <span class="font-medium" x-text="pagination.total || 0"></span> résultats
             </div>
             <div class="flex space-x-2">
                 <button 
@@ -152,7 +212,7 @@
                     <i class="fas fa-chevron-left"></i>
                 </button>
                 <span class="px-4 py-2 border border-gray-300 rounded-lg bg-white">
-                    Page <span x-text="pagination.current_page"></span> sur <span x-text="pagination.last_page"></span>
+                    Page <span x-text="pagination.current_page || 1"></span> sur <span x-text="pagination.last_page || 1"></span>
                 </span>
                 <button 
                     @click="changePage(pagination.current_page + 1)"
@@ -186,6 +246,10 @@ function abonnesData() {
             to: 0,
             total: 0
         },
+        stats: {
+            particuliers: 0,
+            professionnels: 0
+        },
         
         async loadAbonnes(page = 1) {
             this.loading = true;
@@ -210,6 +274,11 @@ function abonnesData() {
                     to: response.data.to,
                     total: response.data.total
                 };
+                
+                // Calculate stats
+                this.stats.particuliers = this.abonnes.filter(a => a.type === 'particulier').length;
+                this.stats.professionnels = this.abonnes.filter(a => a.type === 'professionnel').length;
+                
             } catch (error) {
                 console.error('Error loading abonnes:', error);
                 if (error.response?.status === 401) {
